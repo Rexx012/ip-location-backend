@@ -1,15 +1,22 @@
+// 1. Safely load dotenv ONLY when testing locally
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
+
 const express = require('express');
 const cors = require('cors');
+const { Pool } = require('pg');
+const { PrismaPg } = require('@prisma/adapter-pg');
 const { PrismaClient } = require('@prisma/client');
 
 const app = express();
-
 const port = process.env.PORT || 8000;
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+const adapter = new PrismaPg(pool);
+
+const prisma = new PrismaClient({ adapter });
 
 app.use(cors());
 app.use(express.json());
@@ -19,15 +26,14 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body.requestData;
+  const requestData = req.body.requestData || req.body;
+  const { email, password } = requestData;
 
   try {
-    // Search the database for a user with this username
     const user = await prisma.user.findUnique({
       where: { email: email },
     });
 
-    // If the user doesn't exist, or the password doesn't match, reject them
     if (!user || user.password !== password) {
       return res.json({
         success: false,
@@ -35,7 +41,6 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    // If everything matches, send a success response!
     res.json({ success: true, message: 'Login successful!' });
   } catch (error) {
     console.error('Database connection error:', error);
